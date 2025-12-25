@@ -23,7 +23,7 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.0'
 
-      # 1. 自动补全安卓项目文件
+      # 1. 修复：自动补全缺失的安卓项目文件
       - name: Generate Missing Project Files
         run: |
           rm -f pubspec.lock
@@ -32,25 +32,16 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 2. 构建 Release 包 (体积最小)
-      # 这一步生成的包虽然小，但还没签名，无法安装
-      - name: Build Android APK (Release)
-        run: flutter build apk --release --split-per-abi
+      # 2. 核心步骤：构建“分包”版 APK
+      # --debug: 使用调试模式（最稳定，无须签名配置）
+      # --split-per-abi: 关键瘦身指令！它会把 138MB 的大包拆成 3 个针对不同 CPU 的小包
+      - name: Build Android APK (Split Debug)
+        run: flutter build apk --debug --split-per-abi
 
-      # 3. 【手动签名方案】不依赖第三方插件
-      # 直接下载 uber-apk-signer 工具并运行
-      # 它会自动帮我们用测试证书签名，并进行 Zip 对齐优化
-      - name: Sign APK Manually
-        run: |
-          # 下载签名工具
-          wget https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/uber-apk-signer-1.3.0.jar
-          # 运行签名工具 (会自动扫描 build 目录下的 apk 并签名)
-          java -jar uber-apk-signer-1.3.0.jar --apks build/app/outputs/flutter-apk
-
-      # 4. 上传最终产物
+      # 3. 上传产物
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: huarong-road-final
-          # 签名工具会自动在原文件名后加上 -aligned-debugSigned
-          path: build/app/outputs/flutter-apk/*-aligned-debugSigned.apk
+          name: huarong-road-split
+          # 这里上传所有生成的 apk 文件
+          path: build/app/outputs/flutter-apk/*.apk

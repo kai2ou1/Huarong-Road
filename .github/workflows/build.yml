@@ -23,23 +23,31 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.0'
 
-      # ---【关键修复步骤】开始---
-      # 这一步会在服务器上自动补全缺失的 android 文件夹和配置文件
-      # --project-name 必须和 pubspec.yaml 里的 name 一致 (huarong_road)
+      # 1. 自动补全安卓项目文件
       - name: Generate Missing Project Files
         run: |
           rm -f pubspec.lock
           flutter create . --org com.mygame --project-name huarong_road --platforms android
-      # ---【关键修复步骤】结束---
 
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build Android APK (Debug)
-        run: flutter build apk --debug
+      # 2. 构建 Release 包 (体积最小，但此时未签名)
+      # --split-per-abi 会针对不同CPU架构生成独立包，进一步减小体积
+      - name: Build Android APK (Release)
+        run: flutter build apk --release --split-per-abi
 
+      # 3. 使用黑科技插件自动签名 (使用内置的测试证书)
+      # 这一步是把“生肉”煮熟的关键
+      - name: Sign APK
+        uses: patrickfav/uber-apk-signer-action@v1
+        with:
+          skip_zipalign: false
+
+      # 4. 上传最终产物
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: huarong-road-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: huarong-road-optimized
+          # 插件会自动把签好名的文件放在这个目录下
+          path: build/app/outputs/flutter-apk/*-signed.apk

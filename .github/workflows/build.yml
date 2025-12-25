@@ -4,7 +4,7 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# 必须开启写权限，否则无法发布 Release
+# 权限配置：允许脚本创建发布版
 permissions:
   contents: write
 
@@ -27,6 +27,7 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.0'
 
+      # 1. 修复环境
       - name: Generate Missing Project Files
         run: |
           rm -f pubspec.lock
@@ -35,20 +36,23 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 使用 Split Debug 构建，只生成体积小的包
+      # 2. 构建 (Split Debug 模式，体积小)
       - name: Build Android APK
         run: flutter build apk --debug --split-per-abi
 
-      # --- 核心变化：发布到 Releases ---
-      - name: Release APK to GitHub
-        uses: ncipollo/release-action@v1
+      # 3. 调试：列出生成的文件 (如果有报错，能在日志里看到文件名)
+      - name: List Files
+        run: ls -R build/app/outputs/flutter-apk/
+
+      # 4. 发布到 Releases (使用动态版本号)
+      - name: Release APK
+        uses: softprops/action-gh-release@v1
         with:
-          # 只选 arm64-v8a 这个包 (兼容绝大多数现代手机)
-          # 这样你就只会得到一个 40MB 左右的单文件
-          artifacts: "build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
-          tag: "latest"      # 固定标签名为 latest
-          name: "最新测试版 (Auto Build)"
-          body: "这是由 GitHub Actions 自动构建的最新版本，点击下方 app-arm64...apk 直接下载。"
-          allowUpdates: true # 允许覆盖更新
-          removeArtifacts: true # 移除旧的构建产物
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # 自动生成版本号，例如 v1.0.15 (根据构建次数变化)
+          tag_name: v1.0.${{ github.run_number }}
+          name: "版本 v1.0.${{ github.run_number }}"
+          body: "新的构建已完成！请下载下方以 'arm64-v8a' 结尾的 apk 文件安装。"
+          # 使用通配符，抓取所有 apk 文件
+          files: build/app/outputs/flutter-apk/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

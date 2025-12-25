@@ -4,6 +4,10 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# 必须开启写权限，否则无法发布 Release
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +27,6 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.0'
 
-      # 1. 修复：自动补全缺失的安卓项目文件
       - name: Generate Missing Project Files
         run: |
           rm -f pubspec.lock
@@ -32,16 +35,20 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 2. 核心步骤：构建“分包”版 APK
-      # --debug: 使用调试模式（最稳定，无须签名配置）
-      # --split-per-abi: 关键瘦身指令！它会把 138MB 的大包拆成 3 个针对不同 CPU 的小包
-      - name: Build Android APK (Split Debug)
+      # 使用 Split Debug 构建，只生成体积小的包
+      - name: Build Android APK
         run: flutter build apk --debug --split-per-abi
 
-      # 3. 上传产物
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      # --- 核心变化：发布到 Releases ---
+      - name: Release APK to GitHub
+        uses: ncipollo/release-action@v1
         with:
-          name: huarong-road-split
-          # 这里上传所有生成的 apk 文件
-          path: build/app/outputs/flutter-apk/*.apk
+          # 只选 arm64-v8a 这个包 (兼容绝大多数现代手机)
+          # 这样你就只会得到一个 40MB 左右的单文件
+          artifacts: "build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
+          tag: "latest"      # 固定标签名为 latest
+          name: "最新测试版 (Auto Build)"
+          body: "这是由 GitHub Actions 自动构建的最新版本，点击下方 app-arm64...apk 直接下载。"
+          allowUpdates: true # 允许覆盖更新
+          removeArtifacts: true # 移除旧的构建产物
+          token: ${{ secrets.GITHUB_TOKEN }}

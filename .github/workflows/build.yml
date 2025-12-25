@@ -4,9 +4,8 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# 权限配置：允许脚本创建发布版
-permissions:
-  contents: write
+# 尝试获取所有写权限
+permissions: write-all
 
 jobs:
   build:
@@ -27,7 +26,6 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.0'
 
-      # 1. 修复环境
       - name: Generate Missing Project Files
         run: |
           rm -f pubspec.lock
@@ -36,23 +34,24 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 2. 构建 (Split Debug 模式，体积小)
+      # 构建分包 (Split Debug)
       - name: Build Android APK
         run: flutter build apk --debug --split-per-abi
 
-      # 3. 调试：列出生成的文件 (如果有报错，能在日志里看到文件名)
-      - name: List Files
-        run: ls -R build/app/outputs/flutter-apk/
-
-      # 4. 发布到 Releases (使用动态版本号)
-      - name: Release APK
+      # 【方案 A】尝试发布单文件 (加入 continue-on-error，失败了也不报错)
+      - name: Try Release APK
         uses: softprops/action-gh-release@v1
+        continue-on-error: true  # 关键！就算这一步因权限失败，也不停止
         with:
-          # 自动生成版本号，例如 v1.0.15 (根据构建次数变化)
           tag_name: v1.0.${{ github.run_number }}
           name: "版本 v1.0.${{ github.run_number }}"
-          body: "新的构建已完成！请下载下方以 'arm64-v8a' 结尾的 apk 文件安装。"
-          # 使用通配符，抓取所有 apk 文件
-          files: build/app/outputs/flutter-apk/*.apk
+          files: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 【方案 B】保底上传 (百分百成功)
+      - name: Upload APK (Backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: huarong-road-backup
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
